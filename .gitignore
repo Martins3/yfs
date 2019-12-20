@@ -1,0 +1,14 @@
+*.d
+*.o
+*.a
+
+.ccls-cache
+
+lock_demo
+lock_tester
+lock_server
+rpc/rpctest
+
+cscope.files
+cscope.out
+compile_commands.json
