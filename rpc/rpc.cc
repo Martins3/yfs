@@ -659,6 +659,52 @@ rpcs::checkduplicate_and_update(unsigned int clt_nonce, unsigned int xid,
                                 unsigned int xid_rep, char **b, int *sz)
 {
     ScopedLock rwl(&reply_window_m_);
+    auto & l = reply_window_[clt_nonce];
+
+    if(l.empty()){
+      l.emplace_back(0);
+    }
+
+    // client generate xid in a strict sequence
+    if(!l.empty() && l.front().xid >= xid){
+      return FORGOTTEN;
+    }
+
+    for(auto i = l.begin(); i != l.end() ; i ++){
+      auto j = i;
+      j ++;
+      if(j == l.end() || i->xid + 1 != j->xid){
+        // false, we can't clear it !
+        break;
+      }
+      if(j->xid == xid_rep){
+        while(l.front().xid != xid_rep){
+          free(l.front().buf);
+          l.pop_front();
+        }
+        break;
+      }
+    }
+    
+    for(auto i = l.begin(); i != l.end(); i ++){
+      if(i->xid == xid){
+        if(!i->cb_present){
+          return INPROGRESS;
+        }else{
+          *b = i->buf;
+          *sz = i->sz;
+          return DONE;
+        }
+      }else if(i->xid > xid){
+        auto m = l.insert(i, {xid});
+        m->cb_present = false;
+        return NEW;
+      }
+    }
+
+    l.emplace_back(xid);
+    l.back().cb_present = false;
+
 
     // You fill this in for Lab 1.
     return NEW;
@@ -675,6 +721,28 @@ rpcs::add_reply(unsigned int clt_nonce, unsigned int xid,
 {
     ScopedLock rwl(&reply_window_m_);
     // You fill this in for Lab 1.
+    auto & l = reply_window_[clt_nonce];
+
+    auto k = l.end();
+    for(auto i = l.begin(); i != l.end(); i ++){
+      if(i->xid == xid){
+        k = i;
+        break;
+      }else if(i->xid > xid){
+        k = l.insert(i, {xid});
+        break;
+      }
+    }
+
+    if(k == l.end()){
+      l.emplace_back(xid);
+      k = l.end();
+      k --;
+    }
+
+    k->cb_present = true;
+    k->buf = b;
+    k->sz = sz;
 }
 
 void
